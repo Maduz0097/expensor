@@ -1,0 +1,91 @@
+<%- include('partials/header') %>
+<div class="container mx-auto px-4 py-6">
+    <h1 class="text-2xl font-bold text-gray-800 mb-4">Savings & Investments</h1>
+
+    <!-- Add Savings Form -->
+    <details class="collapsible-section">
+        <summary>Add New Savings</summary>
+        <div class="form-card">
+            <form action="/savings" method="POST" class="form-group form-align">
+                <label for="date">Date:</label>
+                <input type="date" id="date" name="date" required>
+                <label for="account_name">Account Name:</label>
+                <input type="text" id="account_name" name="account_name" required>
+                <label for="type">Type:</label>
+                <input type="text" id="type" name="type" required>
+                <label for="contribution">Contribution (₨):</label>
+                <input type="number" id="contribution" name="contribution" step="0.01" required>
+                <label for="current_value">Current Value (₨):</label>
+                <input type="number" id="current_value" name="current_value" step="0.01" required>
+                <label for="notes">Notes:</label>
+                <textarea id="notes" name="notes"></textarea>
+                <button type="submit">Add Savings</button>
+            </form>
+        </div>
+    </details>
+
+    <!-- Edit Savings Form -->
+    <% if (editSaving) { %>
+        <details class="collapsible-section" open>
+            <summary>Edit Savings</summary>
+            <div class="form-card">
+                <form action="/savings/edit/<%= editSaving.id %>" method="POST" class="form-group">
+                    <label for="edit-date">Date:</label>
+                    <input type="date" id="edit-date" name="date" value="<%= editSaving.date %>" required>
+                    <label for="edit-account_name">Account Name:</label>
+                    <input type="text" id="edit-account_name" name="account_name" value="<%= editSaving.account_name %>" required>
+                    <label for="edit-type">Type:</label>
+                    <input type="text" id="edit-type" name="type" value="<%= editSaving.type %>" required>
+                    <label for="edit-contribution">Contribution (₨):</label>
+                    <input type="number" id="edit-contribution" name="contribution" step="0.01" value="<%= editSaving.contribution %>" required>
+                    <label for="edit-current_value">Current Value (₨):</label>
+                    <input type="number" id="edit-current_value" name="current_value" step="0.01" value="<%= editSaving.current_value %>" required>
+                    <label for="edit-notes">Notes:</label>
+                    <textarea id="edit-notes" name="notes"><%= editSaving.notes %></textarea>
+                    <button type="submit">Update Savings</button>
+                </form>
+            </div>
+        </details>
+    <% } %>
+
+    <!-- Savings Table -->
+    <div class="table-container">
+        <h2 class="text-lg font-semibold text-gray-700 p-4">Savings Records</h2>
+        <% if (savings && savings.length > 0) { %>
+            <table>
+                <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Account Name</th>
+                    <th>Type</th>
+                    <th>Contribution</th>
+                    <th>Current Value</th>
+                    <th>Notes</th>
+                    <th>Actions</th>
+                </tr>
+                </thead>
+                <tbody>
+                <% savings.forEach(item => { %>
+                    <tr>
+                        <td><%= item.date %></td>
+                        <td><%= item.account_name %></td>
+                        <td><%= item.type %></td>
+                        <td>₨<%= item.contribution.toFixed(2) %></td>
+                        <td>₨<%= item.current_value.toFixed(2) %></td>
+                        <td><%= item.notes || '' %></td>
+                        <td>
+                            <a class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" href="/savings/edit/<%= item.id %>">Edit</a>
+                            <form action="/savings/delete/<%= item.id %>" method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this savings record?');">
+                                <button class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded" type="submit">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                <% }); %>
+                </tbody>
+            </table>
+        <% } else { %>
+            <p class="text-gray-500 text-sm p-4">No savings records available.</p>
+        <% } %>
+    </div>
+</div>
+<%- include('partials/footer') %>

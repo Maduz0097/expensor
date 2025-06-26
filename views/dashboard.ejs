@@ -1,0 +1,184 @@
+<%- include('partials/header') %>
+<div class="container mx-auto px-4 py-6">
+    <h1 class="text-2xl font-bold text-gray-800 mb-4">Personal Finance Dashboard</h1>
+
+    <!-- Date Range Form -->
+    <div class="form-card mb-4">
+        <form action="/" method="GET" class="form-group">
+            <label for="startDate">Start Date:</label>
+            <input type="date" id="startDate" name="startDate" value="<%= startDate %>" required>
+            <label for="endDate">End Date:</label>
+            <input type="date" id="endDate" name="endDate" value="<%= endDate %>" required>
+            <button type="submit">Filter</button>
+        </form>
+    </div>
+
+    <!-- Metrics Grid -->
+    <div class="metrics">
+        <div class="metric-card">
+            <h3>Total Income (Period)</h3>
+            <p class="text-green-600">₨<%= totalIncome.toFixed(2) %></p>
+        </div>
+        <div class="metric-card">
+            <h3>Total Expenses (Period)</h3>
+            <p class="text-red-600">₨<%= totalExpenses.toFixed(2) %></p>
+        </div>
+        <div class="metric-card">
+            <h3>Net Flow</h3>
+            <p style="color: <%= netFlow >= 0 ? '#16a34a' : '#dc2626' %>">₨<%= netFlow.toFixed(2) %></p>
+        </div>
+        <div class="metric-card">
+            <h3>Savings Rate</h3>
+            <p class="text-blue-600"><%= savingsRate %>%</p>
+        </div>
+        <div class="metric-card">
+            <h3>Net Worth</h3>
+            <p class="text-purple-600">₨<%= netWorth.toFixed(2) %></p>
+        </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <div class="table-container p-4">
+            <h2 class="text-lg font-semibold text-gray-700 mb-3">Income vs. Expenses Trend</h2>
+            <% if (incomeTrend && Array.isArray(incomeTrend) && expenseTrend && Array.isArray(expenseTrend) && (incomeTrend.length > 0 || expenseTrend.length > 0)) { %>
+                <canvas id="incomeExpenseChart" height="150"></canvas>
+            <% } else { %>
+                <p class="text-gray-500 text-sm">No data available for the trend chart. Add income or expenses to see trends.</p>
+            <% } %>
+        </div>
+        <div class="table-container p-4">
+            <h2 class="text-lg font-semibold text-gray-700 mb-3">Expense Breakdown</h2>
+            <% if (categories && Array.isArray(categories) && categories.length > 0) { %>
+                <canvas id="expenseCategoryChart" height="150"></canvas>
+            <% } else { %>
+                <p class="text-gray-500 text-sm">No expense data available. Add expenses to see the breakdown.</p>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- Expense Table -->
+    <div class="table-container">
+        <h2 class="text-lg font-semibold text-gray-700 p-4">Expense Breakdown by Category</h2>
+        <% if (categories && Array.isArray(categories) && categories.length > 0) { %>
+            <table>
+                <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Amount</th>
+                </tr>
+                </thead>
+                <tbody>
+                <% categories.forEach(category => { %>
+                    <tr>
+                        <td><%= category.category || 'Unknown' %></td>
+                        <td>₨<%= (category.amount || 0).toFixed(2) %></td>
+                    </tr>
+                <% }); %>
+                </tbody>
+            </table>
+        <% } else { %>
+            <p class="text-gray-500 text-sm p-4">No expenses recorded for this period.</p>
+        <% } %>
+    </div>
+</div>
+
+<!-- Chart.js and Dependencies -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0"></script>
+<script>
+    // Debug data
+    console.log('Moment.js loaded:', typeof moment !== 'undefined');
+    console.log('Chart.js loaded:', typeof Chart !== 'undefined');
+    console.log('Income Trend:', <%- JSON.stringify(incomeTrend) %>);
+    console.log('Expense Trend:', <%- JSON.stringify(expenseTrend) %>);
+    console.log('Categories:', <%- JSON.stringify(categories) %>);
+
+    // Validate trend data
+    const incomeTrend = <%- JSON.stringify(incomeTrend) %>;
+    const expenseTrend = <%- JSON.stringify(expenseTrend) %>;
+    const isValidTrendData = (data) => Array.isArray(data) && data.every(item =>
+        typeof item === 'object' && item.x && !isNaN(item.y) && moment(item.x, 'YYYY-MM', true).isValid()
+    );
+    console.log('Income Trend Valid:', isValidTrendData(incomeTrend));
+    console.log('Expense Trend Valid:', isValidTrendData(expenseTrend));
+
+    // Line Chart
+    <% if (incomeTrend && Array.isArray(incomeTrend) && expenseTrend && Array.isArray(expenseTrend) && (incomeTrend.length > 0 || expenseTrend.length > 0)) { %>
+    try {
+        const incomeExpenseChart = new Chart(document.getElementById('incomeExpenseChart').getContext('2d'), {
+            type: 'line',
+            data: {
+                datasets: [
+                    {
+                        label: 'Income',
+                        data: incomeTrend,
+                        borderColor: '#16a34a',
+                        fill: false,
+                        tension: 0.3
+                    },
+                    {
+                        label: 'Expenses',
+                        data: expenseTrend,
+                        borderColor: '#dc2626',
+                        fill: false,
+                        tension: 0.3
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'month',
+                            displayFormats: { month: 'MMM YYYY' }
+                        },
+                        title: { display: true, text: 'Month' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Amount (₨)' },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error rendering income/expense chart:', error);
+    }
+    <% } %>
+
+    // Pie Chart
+    <% if (categories && Array.isArray(categories) && categories.length > 0) { %>
+    try {
+        const expenseCategoryChart = new Chart(document.getElementById('expenseCategoryChart').getContext('2d'), {
+            type: 'pie',
+            data: {
+                labels: <%- JSON.stringify(categories.map(c => c.category || 'Unknown')) %>,
+                datasets: [{
+                    data: <%- JSON.stringify(categories.map(c => c.amount || 0)) %>,
+                    backgroundColor: ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6b7280', '#22c55e']
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.label}: ₨${context.raw.toFixed(2)}`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error rendering expense category chart:', error);
+    }
+    <% } %>
+</script>
+<%- include('partials/footer') %>
