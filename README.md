@@ -98,4 +98,4 @@ Purpose: A personal tool to track my finances—no judgment, please! 😅
 📜 License
 This project is licensed under the MIT License. See LICENSE for details.
 
-Happy Tracking! 💸Made with ❤️ by [Your Name] and a sprinkle of AI magic! ✨
+Happy Tracking! 💸Made with ❤️ by Yamika Perera and a sprinkle of AI magic! ✨
