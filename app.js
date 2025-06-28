@@ -1,33 +1,32 @@
 const express = require('express');
-const bodyParser = require('body-parser');
-const session = require('express-session');
-const dotenv = require('dotenv');
 const path = require('path');
-const routes = require('./routes/index');
-
-dotenv.config();
+const incomeRoutes = require('./routes/income');
+const expenseRoutes = require('./routes/expenses');
+const savingsRoutes = require('./routes/savings');
+const budgetRoutes = require('./routes/budget');
+const assetsLiabilitiesRoutes = require('./routes/assetsLiabilities');
+const loansLeasesRoutes = require('./routes/loansLeases');
+const indexRoutes = require('./routes/index');
 
 const app = express();
 
-// Set up EJS as the template engine
+// Middleware
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// Middleware
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.json());
-app.use(session({
-    secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: true
-}));
-
 // Routes
-app.use('/', routes);
+app.use('/', indexRoutes);
+app.use('/income', incomeRoutes);
+app.use('/expenses', expenseRoutes);
+app.use('/savings', savingsRoutes);
+app.use('/budget', budgetRoutes);
+app.use('/assets-liabilities', assetsLiabilitiesRoutes);
+app.use('/loans-leases', loansLeasesRoutes);
 
 // Start server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
 });

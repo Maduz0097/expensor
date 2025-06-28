@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getAllExpenses, getExpenseById, insertExpense, updateExpense, deleteExpense } = require('../utils/db');
+const { getAllExpenses, getExpenseById, insertExpense, updateExpense, deleteExpense, getAllLoansLeases } = require('../utils/db');
 
 /**
  * GET /expenses - Fetch and render expense log
@@ -10,7 +10,8 @@ const { getAllExpenses, getExpenseById, insertExpense, updateExpense, deleteExpe
 router.get('/', async (req, res) => {
     try {
         const expenses = await getAllExpenses();
-        res.render('expenses', { title: 'Expense Log', expenses, editExpense: null });
+        const loansLeases = await getAllLoansLeases();
+        res.render('expenses', { title: 'Expense Log', expenses, editExpense: null, loansLeases });
     } catch (error) {
         console.error('Expenses fetch error:', error);
         res.status(500).send('Server error: Unable to fetch expenses');
@@ -28,7 +29,8 @@ router.get('/edit/:id', async (req, res) => {
         if (!expense) {
             return res.status(404).send('Expense record not found');
         }
-        res.render('expenses', { title: 'Edit Expense', expenses: await getAllExpenses(), editExpense: expense });
+        const loansLeases = await getAllLoansLeases();
+        res.render('expenses', { title: 'Edit Expense', expenses: await getAllExpenses(), editExpense: expense, loansLeases });
     } catch (error) {
         console.error('Expense edit fetch error:', error);
         res.status(500).send('Server error: Unable to fetch expense record');
@@ -42,8 +44,8 @@ router.get('/edit/:id', async (req, res) => {
  */
 router.post('/', async (req, res) => {
     try {
-        const { date, description, category, amount, payment_method, notes } = req.body;
-        await insertExpense(date, description, category, amount, payment_method, notes);
+        const { date, description, category, amount, payment_method, notes, loan_lease_id } = req.body;
+        await insertExpense(date, description, category, parseFloat(amount), payment_method, notes, loan_lease_id ? parseInt(loan_lease_id) : null);
         res.redirect('/expenses');
     } catch (error) {
         console.error('Expenses insert error:', error);
@@ -58,8 +60,17 @@ router.post('/', async (req, res) => {
  */
 router.post('/edit/:id', async (req, res) => {
     try {
-        const { date, description, category, amount, payment_method, notes } = req.body;
-        await updateExpense(req.params.id, date, description, category, amount, payment_method, notes);
+        const { date, description, category, amount, payment_method, notes, loan_lease_id } = req.body;
+        await updateExpense(
+            req.params.id,
+            date,
+            description,
+            category,
+            parseFloat(amount),
+            payment_method,
+            notes,
+            loan_lease_id ? parseInt(loan_lease_id) : null
+        );
         res.redirect('/expenses');
     } catch (error) {
         console.error('Expense update error:', error);

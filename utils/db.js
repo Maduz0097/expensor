@@ -50,7 +50,7 @@ const queryOne = (sql, params = []) => {
  * Wraps SQLite insert or update in a Promise
  * @param {string} sql - SQL query
  * @param {Array} params - Query parameters
- * @returns {Promise<void>}
+ * @returns {Promise<Object>} Last inserted ID
  */
 const run = (sql, params = []) => {
     return new Promise((resolve, reject) => {
@@ -58,12 +58,12 @@ const run = (sql, params = []) => {
             reject(new Error('Database not initialized or db.run is not a function'));
             return;
         }
-        db.run(sql, params, (err) => {
+        db.run(sql, params, function (err) {
             if (err) {
                 console.error('run error:', err.message, { sql, params });
                 reject(err);
             } else {
-                resolve();
+                resolve({ lastID: this.lastID });
             }
         });
     });
@@ -118,10 +118,19 @@ const getExpenseCategories = async (startDate, endDate) => {
  */
 const getNetWorth = async () => {
     const row = await queryOne(`SELECT * FROM assets_liabilities ORDER BY date DESC LIMIT 1`);
+    const loansLeases = await queryAll(`SELECT SUM(remaining_balance) as total_loans_leases FROM loans_leases`);
     if (!row) return 0;
+    const totalLoansLeases = loansLeases[0]?.total_loans_leases || 0;
     return (
-        row.cash_bank + row.investments + row.property + row.vehicles + row.other_valuables -
-        row.credit_card_debt - row.loans - row.mortgage - row.other_debts
+        row.cash_bank +
+        row.investments +
+        row.property +
+        row.vehicles +
+        row.other_valuables -
+        row.credit_card_debt -
+        row.mortgage -
+        row.other_debts -
+        totalLoansLeases
     );
 };
 
@@ -227,7 +236,11 @@ const deleteIncome = async (id) => {
  * @returns {Promise<Array>} Expense records
  */
 const getAllExpenses = async () => {
-    return await queryAll(`SELECT * FROM expenses`);
+    return await queryAll(`
+    SELECT e.*, ll.name as loan_lease_name 
+    FROM expenses e 
+    LEFT JOIN loans_leases ll ON e.loan_lease_id = ll.id
+  `);
 };
 
 /**
@@ -236,7 +249,12 @@ const getAllExpenses = async () => {
  * @returns {Promise<Object>} Expense record
  */
 const getExpenseById = async (id) => {
-    return await queryOne(`SELECT * FROM expenses WHERE id = ?`, [id]);
+    return await queryOne(`
+    SELECT e.*, ll.name as loan_lease_name 
+    FROM expenses e 
+    LEFT JOIN loans_leases ll ON e.loan_lease_id = ll.id 
+    WHERE e.id = ?
+  `, [id]);
 };
 
 /**
@@ -247,13 +265,21 @@ const getExpenseById = async (id) => {
  * @param {number} amount - Expense amount
  * @param {string} payment_method - Payment method
  * @param {string} notes - Expense notes
+ * @param {number|null} loan_lease_id - Loan/Lease ID
  * @returns {Promise<void>}
  */
-const insertExpense = async (date, description, category, amount, payment_method, notes) => {
+const insertExpense = async (date, description, category, amount, payment_method, notes, loan_lease_id = null) => {
     await run(
-        `INSERT INTO expenses (date, description, category, amount, payment_method, notes) VALUES (?, ?, ?, ?, ?, ?)`,
-        [date, description, category, amount, payment_method, notes]
+        `INSERT INTO expenses (date, description, category, amount, payment_method, notes, loan_lease_id) 
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [date, description, category, amount, payment_method, notes, loan_lease_id]
     );
+    if (loan_lease_id && (category === 'Loan' || category === 'Lease')) {
+        await run(
+            `UPDATE loans_leases SET remaining_balance = remaining_balance - ? WHERE id = ?`,
+            [amount, loan_lease_id]
+        );
+    }
 };
 
 /**
@@ -265,13 +291,28 @@ const insertExpense = async (date, description, category, amount, payment_method
  * @param {number} amount - Expense amount
  * @param {string} payment_method - Payment method
  * @param {string} notes - Expense notes
+ * @param {number|null} loan_lease_id - Loan/Lease ID
  * @returns {Promise<void>}
  */
-const updateExpense = async (id, date, description, category, amount, payment_method, notes) => {
+const updateExpense = async (id, date, description, category, amount, payment_method, notes, loan_lease_id = null) => {
+    const oldExpense = await getExpenseById(id);
+    if (oldExpense.loan_lease_id && (oldExpense.category === 'Loan' || oldExpense.category === 'Lease')) {
+        await run(
+            `UPDATE loans_leases SET remaining_balance = remaining_balance + ? WHERE id = ?`,
+            [oldExpense.amount, oldExpense.loan_lease_id]
+        );
+    }
     await run(
-        `UPDATE expenses SET date = ?, description = ?, category = ?, amount = ?, payment_method = ?, notes = ? WHERE id = ?`,
-        [date, description, category, amount, payment_method, notes, id]
+        `UPDATE expenses SET date = ?, description = ?, category = ?, amount = ?, payment_method = ?, notes = ?, loan_lease_id = ? 
+     WHERE id = ?`,
+        [date, description, category, amount, payment_method, notes, loan_lease_id, id]
     );
+    if (loan_lease_id && (category === 'Loan' || category === 'Lease')) {
+        await run(
+            `UPDATE loans_leases SET remaining_balance = remaining_balance - ? WHERE id = ?`,
+            [amount, loan_lease_id]
+        );
+    }
 };
 
 /**
@@ -280,6 +321,13 @@ const updateExpense = async (id, date, description, category, amount, payment_me
  * @returns {Promise<void>}
  */
 const deleteExpense = async (id) => {
+    const expense = await getExpenseById(id);
+    if (expense.loan_lease_id && (expense.category === 'Loan' || expense.category === 'Lease')) {
+        await run(
+            `UPDATE loans_leases SET remaining_balance = remaining_balance + ? WHERE id = ?`,
+            [expense.amount, expense.loan_lease_id]
+        );
+    }
     await run(`DELETE FROM expenses WHERE id = ?`, [id]);
 };
 
@@ -474,6 +522,110 @@ const deleteAssetsLiabilities = async (id) => {
     await run(`DELETE FROM assets_liabilities WHERE id = ?`, [id]);
 };
 
+/**
+ * Get all loans and leases
+ * @returns {Promise<Array>} Loan and lease records
+ */
+const getAllLoansLeases = async () => {
+    return await queryAll(`SELECT * FROM loans_leases`);
+};
+
+/**
+ * Get loan/lease by ID
+ * @param {number} id - Loan/Lease ID
+ * @returns {Promise<Object>} Loan/Lease record
+ */
+const getLoanLeaseById = async (id) => {
+    return await queryOne(`SELECT * FROM loans_leases WHERE id = ?`, [id]);
+};
+
+/**
+ * Insert new loan/lease
+ * @param {string} name - Loan/Lease name
+ * @param {string} type - Loan or Lease
+ * @param {number} total_amount - Total amount
+ * @param {number} monthly_installment - Monthly installment
+ * @param {number} remaining_balance - Remaining balance
+ * @param {string} start_date - Start date
+ * @param {string} end_date - End date
+ * @param {string} notes - Notes
+ * @returns {Promise<number>} Inserted ID
+ */
+const insertLoanLease = async (name, type, total_amount, monthly_installment, remaining_balance, start_date, end_date, notes) => {
+    const result = await run(
+        `INSERT INTO loans_leases (name, type, total_amount, monthly_installment, remaining_balance, start_date, end_date, notes) 
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [name, type, total_amount, monthly_installment, remaining_balance, start_date, end_date, notes]
+    );
+    return result.lastID;
+};
+
+/**
+ * Update loan/lease
+ * @param {number} id - Loan/Lease ID
+ * @param {string} name - Loan/Lease name
+ * @param {string} type - Loan or Lease
+ * @param {number} total_amount - Total amount
+ * @param {number} monthly_installment - Monthly installment
+ * @param {number} remaining_balance - Remaining balance
+ * @param {string} start_date - Start date
+ * @param {string} end_date - End date
+ * @param {string} notes - Notes
+ * @returns {Promise<void>}
+ */
+const updateLoanLease = async (id, name, type, total_amount, monthly_installment, remaining_balance, start_date, end_date, notes) => {
+    await run(
+        `UPDATE loans_leases SET name = ?, type = ?, total_amount = ?, monthly_installment = ?, remaining_balance = ?, start_date = ?, end_date = ?, notes = ? 
+     WHERE id = ?`,
+        [name, type, total_amount, monthly_installment, remaining_balance, start_date, end_date, notes, id]
+    );
+};
+
+/**
+ * Delete loan/lease
+ * @param {number} id - Loan/Lease ID
+ * @returns {Promise<void>}
+ */
+const deleteLoanLease = async (id) => {
+    await run(`DELETE FROM expenses WHERE loan_lease_id = ?`, [id]);
+    await run(`DELETE FROM loans_leases WHERE id = ?`, [id]);
+};
+
+/**
+ * Get loan/lease progress for a date range
+ * @param {string} startDate - Start date (YYYY-MM-DD)
+ * @param {string} endDate - End date (YYYY-MM-DD)
+ * @returns {Promise<Array>} Loan/lease progress data
+ */
+const getLoanLeaseProgress = async (startDate, endDate) => {
+    try {
+        const loansLeases = await queryAll(`
+            SELECT ll.id, ll.name, ll.type, ll.total_amount, ll.monthly_installment, ll.remaining_balance,
+                   COALESCE(SUM(e.amount), 0) as paid_amount
+            FROM loans_leases ll
+            LEFT JOIN expenses e ON ll.id = e.loan_lease_id AND e.date BETWEEN ? AND ?
+            GROUP BY ll.id
+        `, [startDate, endDate]);
+        const result = loansLeases.map(ll => {
+            const totalAmount = parseFloat(ll.total_amount) || 0;
+            const remainingBalance = parseFloat(ll.remaining_balance) || 0;
+            const progress = totalAmount > 0 ? ((totalAmount - remainingBalance) / totalAmount * 100) : 0;
+            return {
+                ...ll,
+                total_amount: totalAmount,
+                remaining_balance: remainingBalance,
+                progress: parseFloat(progress.toFixed(2)) // Ensure progress is a number
+            };
+        });
+        console.log('Loan/Lease Progress:', result);
+        return result;
+    } catch (err) {
+        console.error('Error in getLoanLeaseProgress:', err);
+        throw err;
+    }
+};
+
+
 module.exports = {
     getTotalIncome,
     getTotalExpenses,
@@ -505,5 +657,11 @@ module.exports = {
     getAssetsLiabilitiesById,
     insertAssetsLiabilities,
     updateAssetsLiabilities,
-    deleteAssetsLiabilities
+    deleteAssetsLiabilities,
+    getAllLoansLeases,
+    getLoanLeaseById,
+    insertLoanLease,
+    updateLoanLease,
+    deleteLoanLease,
+    getLoanLeaseProgress,queryAll, queryOne
 };
